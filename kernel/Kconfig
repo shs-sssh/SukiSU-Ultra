@@ -137,6 +137,13 @@ config KSU_SUSFS_TRY_UMOUNT
 	help
 	  Allows SUSFS to automatically try umounting hidden mounts in targeted user spaces.
 
+config KSU_SUSFS_SUS_SU
+	bool "Enable SUSFS sus_su feature"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Enable sus_su feature in SUSFS to inline hide su binary and superuser access.
+
 endmenu
 
 endmenu
