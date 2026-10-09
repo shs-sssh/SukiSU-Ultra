@@ -1,7 +1,7 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 #define SELINUX_POLICY_INSTEAD_SELINUX_SS
-struct selinux_policy *backup_sepolicy;
 #else
+struct selinux_policy *backup_sepolicy;
 /* 5.10 以下内核没有 struct selinux_policy 这个封装，
  * 自己补一个等价结构，字段跟 5.10+ 版本的使用方式保持一致
  * (pol->policydb / pol->sidtab / pol->latest_granting) */
@@ -217,9 +217,16 @@ out_unlock:
     cpumask_t old_mask;
     db = get_policydb();
 
-    /* snapshot pristine policy BEFORE KernelSU rules are injected in-place,
-     * so selinux_hide can present it later. Mirrors the >=5.10 logic above. */
-    backup_sepolicy = ksu_dup_sepolicy(db);
+    rwlock_t *lock = ksu_get_policy_rwlock();
+
+    {
+        struct selinux_policy tmp_pol;
+        memset(&tmp_pol, 0, sizeof(tmp_pol));
+        if (lock) read_lock(lock);
+        tmp_pol.policydb = *db;
+        if (lock) read_unlock(lock);
+        backup_sepolicy = ksu_dup_sepolicy(&tmp_pol);
+    }
     if (IS_ERR(backup_sepolicy)) {
         pr_err("failed to create backup sepolicy: %ld\n", PTR_ERR(backup_sepolicy));
         backup_sepolicy = NULL;
@@ -242,7 +249,6 @@ out_unlock:
         }
     }
 
-    rwlock_t *lock = ksu_get_policy_rwlock();
     if (!lock)
         goto do_stop_machine;
 
