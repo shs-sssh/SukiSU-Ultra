@@ -11,6 +11,7 @@
 #include "selinux_hide.h"
 #include "../include/ksu.h"
 #include "../selinux/selinux.h"
+#include "../selinux/sepolicy.h"
 static DEFINE_MUTEX(selinux_hide_mutex);
 bool ksu_selinux_hide_enabled __read_mostly = false;
 bool ksu_selinux_hide_running __read_mostly = false;
