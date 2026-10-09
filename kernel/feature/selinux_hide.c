@@ -10,11 +10,15 @@
 #include <ss/conditional.h>
 #include "selinux_hide.h"
 #include "../include/ksu.h"
+#include "../selinux/selinux.h"
 static DEFINE_MUTEX(selinux_hide_mutex);
 bool ksu_selinux_hide_enabled __read_mostly = false;
 bool ksu_selinux_hide_running __read_mostly = false;
 
 // For Linux 5.4: simplified status tracking
+#ifdef KSU_COMPAT_USE_STATIC_KEY
+DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);
+#endif
 static bool fake_status_initialized = false;
 struct page *fake_status = NULL;  // Keep for compatibility but don't use
 
@@ -55,7 +59,6 @@ static int ksu_selinux_hide_enable(void)
     
     pr_info("selinux_hide: selinux hide enabled\n");
     return 0;
-}
 }
 
 static int selinux_hide_feature_get(u64 *value)
