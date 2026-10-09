@@ -217,6 +217,31 @@ out_unlock:
     cpumask_t old_mask;
     db = get_policydb();
 
+    /* snapshot pristine policy BEFORE KernelSU rules are injected in-place,
+     * so selinux_hide can present it later. Mirrors the >=5.10 logic above. */
+    backup_sepolicy = ksu_dup_sepolicy(db);
+    if (IS_ERR(backup_sepolicy)) {
+        pr_err("failed to create backup sepolicy: %ld\n", PTR_ERR(backup_sepolicy));
+        backup_sepolicy = NULL;
+    } else {
+        backup_sepolicy->sidtab = kzalloc(sizeof(*backup_sepolicy->sidtab), GFP_KERNEL);
+        if (!backup_sepolicy->sidtab) {
+            pr_err("failed to alloc backup sidtab\n");
+            ksu_destroy_sepolicy(backup_sepolicy);
+            backup_sepolicy = NULL;
+        } else {
+            int ret = policydb_load_isids(&backup_sepolicy->policydb, backup_sepolicy->sidtab);
+            if (ret) {
+                pr_err("failed to load isids for backup sepolicy: %d!\n", ret);
+                kfree(backup_sepolicy->sidtab);
+                ksu_destroy_sepolicy(backup_sepolicy);
+                backup_sepolicy = NULL;
+            } else {
+                pr_info("backup sepolicy success!\n");
+            }
+        }
+    }
+
     rwlock_t *lock = ksu_get_policy_rwlock();
     if (!lock)
         goto do_stop_machine;
