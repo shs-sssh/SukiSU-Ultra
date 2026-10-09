@@ -3,6 +3,12 @@
 
 #include "ss/policydb.h"
 
+// 补全 struct selinux_policy 结构体定义
+struct selinux_policy {
+	struct policydb policydb;
+	struct sidtab *sidtab;
+	int latest_granting;
+};
 struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol);
 
 void ksu_destroy_sepolicy(struct selinux_policy *orig);
