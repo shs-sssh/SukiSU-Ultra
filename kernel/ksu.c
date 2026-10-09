@@ -143,10 +143,6 @@ int __init kernelsu_init(void)
 
     ksu_adb_root_init();
 
-
-    ksu_selinux_hide_init();
-
-
     ksu_kernel_umount_init();
 
     ksu_allowlist_init();
