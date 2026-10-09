@@ -1198,4 +1198,62 @@ out_free_data:
 
     return ERR_PTR(ret);
 }
+#else
+
+// ======== sepolicy (pre-5.10 compat) ========
+
+void ksu_destroy_sepolicy(struct selinux_policy *pol)
+{
+    if (!pol)
+        return;
+    policydb_destroy(&pol->policydb);
+    kfree(pol);
+}
+
+struct selinux_policy *ksu_dup_sepolicy(struct policydb *old_db)
+{
+    int ret;
+    size_t len;
+    struct selinux_policy *new_pol;
+    void *data;
+    struct policy_file fp;
+
+    len = old_db->len;
+    data = vmalloc(len);
+    if (!data) {
+        pr_err("alloc policy len %ld\n", len);
+        return ERR_PTR(-ENOMEM);
+    }
+
+    fp.data = data;
+    fp.len = len;
+
+    ret = policydb_write(old_db, &fp);
+    if (ret) {
+        pr_err("sepolicy: policydb_write: %d\n", ret);
+        kvfree(data);
+        return ERR_PTR(ret);
+    }
+
+    new_pol = kzalloc(sizeof(*new_pol), GFP_KERNEL);
+    if (!new_pol) {
+        kvfree(data);
+        return ERR_PTR(-ENOMEM);
+    }
+
+    fp.data = data;
+    fp.len = len;
+
+    ret = policydb_read(&new_pol->policydb, &fp);
+    if (ret) {
+        pr_err("sepolicy: policydb_read: %d\n", ret);
+        kfree(new_pol);
+        kvfree(data);
+        return ERR_PTR(ret);
+    }
+    new_pol->policydb.len = len;
+    kvfree(data);
+
+    return new_pol;
+}
 #endif
