@@ -997,7 +997,7 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     } // Sentinel
 };
 // clang-format on
-long ksu_supercall_handle_ioctl(const struct file *filp, unsigned int cmd, void __user *argp)
+long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp)
 {
     int i;
 
