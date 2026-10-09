@@ -209,36 +209,7 @@ out_unlock:
 
     rwlock_t *lock = ksu_get_policy_rwlock();
 
-	// backup_sepolicy = NULL; // selinux_hide 暂不可用，禁用该功能，避免结构体直接赋值导致的内核崩溃
-    {
-        struct selinux_policy tmp_pol;
-        memset(&tmp_pol, 0, sizeof(tmp_pol));
-        if (lock) read_lock(lock);
-        tmp_pol.policydb = *db;
-        if (lock) read_unlock(lock);
-        backup_sepolicy = ksu_dup_sepolicy(&tmp_pol);
-    }
-    if (IS_ERR(backup_sepolicy)) {
-        pr_err("failed to create backup sepolicy: %ld\n", PTR_ERR(backup_sepolicy));
-        backup_sepolicy = NULL;
-    } else {
-        backup_sepolicy->sidtab = kzalloc(sizeof(*backup_sepolicy->sidtab), GFP_KERNEL);
-        if (!backup_sepolicy->sidtab) {
-            pr_err("failed to alloc backup sidtab\n");
-            ksu_destroy_sepolicy(backup_sepolicy);
-            backup_sepolicy = NULL;
-        } else {
-            int ret = policydb_load_isids(&backup_sepolicy->policydb, backup_sepolicy->sidtab);
-            if (ret) {
-                pr_err("failed to load isids for backup sepolicy: %d!\n", ret);
-                kfree(backup_sepolicy->sidtab);
-                ksu_destroy_sepolicy(backup_sepolicy);
-                backup_sepolicy = NULL;
-            } else {
-                pr_info("backup sepolicy success!\n");
-            }
-        }
-    }
+	backup_sepolicy = NULL; // selinux_hide 暂不可用，禁用该功能，避免结构体直接赋值导致的内核崩溃
 
     if (!lock)
         goto do_stop_machine;
