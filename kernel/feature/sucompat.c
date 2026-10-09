@@ -383,13 +383,3 @@ void __exit ksu_sucompat_exit(void)
 {
     ksu_unregister_feature_handler(KSU_FEATURE_SU_COMPAT);
 }
-
-int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
-                      void *argv_user, void *envp_user,
-                      int *__never_use_flags, int *retval)
-{
-    if (*retval >= 0) {
-        (void)ksu_install_su_fd();
-    }
-    return 0;
-}
