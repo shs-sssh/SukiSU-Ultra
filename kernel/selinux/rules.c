@@ -1,6 +1,16 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 #define SELINUX_POLICY_INSTEAD_SELINUX_SS
 struct selinux_policy *backup_sepolicy;
+#else
+/* 5.10 以下内核没有 struct selinux_policy 这个封装，
+ * 自己补一个等价结构，字段跟 5.10+ 版本的使用方式保持一致
+ * (pol->policydb / pol->sidtab / pol->latest_granting) */
+struct selinux_policy {
+    struct policydb policydb;
+    struct sidtab *sidtab;
+    u32 latest_granting;
+};
+struct selinux_policy *backup_sepolicy;
 #endif
 
 #define ALL NULL
