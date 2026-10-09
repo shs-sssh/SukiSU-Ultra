@@ -19,7 +19,9 @@ static DEFINE_MUTEX(selinux_hide_mutex);
 bool ksu_selinux_hide_enabled __read_mostly = false;
 bool ksu_selinux_hide_running __read_mostly = false;
 
-// For Linux 5.4: simplified status tracking
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
+struct selinux_state fake_state;
+#endif
 #ifdef KSU_COMPAT_USE_STATIC_KEY
 DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);
 #endif
@@ -58,10 +60,12 @@ static int ksu_selinux_hide_enable(void)
         return -EAGAIN;
     }
 
-    // Linux 5.4: backup_sepolicy is managed in selinux/rules.c
-    // No need to set fake_state.policy (doesn't exist in 5.4)
     
-    pr_info("selinux_hide: selinux hide enabled\n");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+#else
+    fake_state.initialized = true;
+    fake_state.policy = backup_sepolicy;
+#endif
     return 0;
 }
 
