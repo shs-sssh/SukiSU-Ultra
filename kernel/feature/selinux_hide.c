@@ -1,4 +1,5 @@
 #include <linux/cpu.h>
+#include <linux/version.h>
 #include <linux/memory.h>
 #include <asm-generic/errno-base.h>
 #include <net/genetlink.h>
