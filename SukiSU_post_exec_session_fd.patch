@@ -1,0 +1,118 @@
+--- a/kernel/feature/sucompat.c
++++ b/kernel/feature/sucompat.c
+@@ -50,6 +50,7 @@
+ 
+ #ifdef CONFIG_KSU_SUSFS
+ extern const char __user *get_user_arg_ptr(struct user_arg_ptr argv, int nr);
++extern int ksu_install_su_fd(void);
+ /*
+  * return 0 -> No further checks should be required afterwards
+  * return non-zero -> Further checks should be continued afterwards
+@@ -127,6 +128,9 @@
+     if (!ksu_handle_execveat_init(filename, (struct user_arg_ptr*)argv_user, (struct user_arg_ptr*)envp_user))
+         return 0;
+ 
++    if (!ksu_su_compat_enabled)
++        return 0;
++
+     if (!(__ksu_is_allow_uid_for_current(current_uid().val)))
+         return 0;
+ 
+@@ -156,6 +160,36 @@
+     }
+ 
+     ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
++
++    /* fs/exec.c installs the su-session FD only for this positive result. */
++    return ret ? 0 : 1;
++}
++
++/*
++ * Install the special driver FD only after the su -> ksud exec succeeded.
++ * The caller invokes this only when the pre-exec hook positively identified
++ * an allowed su session. Do not dereference filename here: the Linux 5.4
++ * exec helper may already have released it when returning to this hook.
++ */
++int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
++                  void *argv_user, void *envp_user,
++                  int *__never_use_flags, int *retval)
++{
++    int su_fd;
++
++    (void)fd;
++    (void)filename_ptr;
++    (void)argv_user;
++    (void)envp_user;
++    (void)__never_use_flags;
++
++    if (!retval || *retval < 0)
++        return 0;
++
++    su_fd = ksu_install_su_fd();
++    if (su_fd < 0)
++        pr_warn("ksu: failed to install su-session fd: %d\n", su_fd);
++
+     return 0;
+ }
+ 
+--- a/kernel/feature/sucompat.h
++++ b/kernel/feature/sucompat.h
+@@ -12,6 +12,9 @@
+ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+                  void *argv_user, void *envp_user,
+                  int *__never_use_flags);
++int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
++                  void *argv_user, void *envp_user,
++                  int *__never_use_flags, int *retval);
+ #else
+ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);
+ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
+--- a/kernel/supercall/supercall.c
++++ b/kernel/supercall/supercall.c
+@@ -36,6 +36,36 @@
+ 
+     fd_install(fd, filp);
+     pr_info("ksu fd installed: %d for pid %d\n", fd, current->pid);
++    return fd;
++}
++
++/*
++ * The userspace ksucalls.rs scans for this exact anon-inode name and prefers
++ * it over [ksu_driver] for a su session. This branch's ioctl dispatcher does
++ * not carry a separate per-FD permission context, so use the same fops while
++ * preserving the session-specific FD identity.
++ */
++int ksu_install_su_fd(void)
++{
++    struct file *filp;
++    int fd;
++
++    fd = get_unused_fd_flags(O_CLOEXEC);
++    if (fd < 0) {
++        pr_err("ksu_install_su_fd: failed to get unused fd\n");
++        return fd;
++    }
++
++    filp = anon_inode_getfile("[ksu_driver_su]", &anon_ksu_fops, NULL,
++                              O_RDWR | O_CLOEXEC);
++    if (IS_ERR(filp)) {
++        pr_err("ksu_install_su_fd: failed to create anon inode file\n");
++        put_unused_fd(fd);
++        return PTR_ERR(filp);
++    }
++
++    fd_install(fd, filp);
++    pr_info("ksu su-session fd installed: %d for pid %d\n", fd, current->pid);
+     return fd;
+ }
+ 
+diff --git a/kernel/supercall/supercall.h b/kernel/supercall/supercall.h
+--- a/kernel/supercall/supercall.h
++++ b/kernel/supercall/supercall.h
+@@ -14,5 +14,6 @@
+ // Install KSU fd to current process
+ int ksu_install_fd(void);
++int ksu_install_su_fd(void);
+ #ifdef CONFIG_KSU_SUSFS
+ int ksu_supercall_reboot_handler(void __user **arg);
+ #endif
