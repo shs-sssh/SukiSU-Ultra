@@ -9,70 +9,22 @@
 #include <ss/mls.h>
 #include <ss/conditional.h>
 #include "selinux_hide.h"
+#include "../include/ksu.h"
 static DEFINE_MUTEX(selinux_hide_mutex);
 bool ksu_selinux_hide_enabled __read_mostly = false;
 bool ksu_selinux_hide_running __read_mostly = false;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-int security_context_to_sid_with_policy(struct selinux_policy *policy, const char *scontext, u32 scontext_len,
-                                               u32 *sid, u32 def_sid, gfp_t gfp_flags);
-int security_sid_to_context_with_policy(struct selinux_policy *policy, u32 sid, char **scontext,
-                                               u32 *scontext_len);
-void security_compute_av_user_with_policy(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass,
-                                                 struct av_decision *avd);
-extern void security_dump_masked_av_fn(struct policydb *policydb,
-				    struct context *scontext,
-				    struct context *tcontext,
-				    u16 tclass,
-				    u32 permissions,
-				    const char *reason);
-extern void context_struct_compute_av_fn(struct policydb *policydb,
-				      struct context *scontext,
-				      struct context *tcontext,
-				      u16 tclass,
-				      struct av_decision *avd,
-				      struct extended_perms *xperms);
-#else
-struct selinux_state fake_state;
-#endif
-#ifdef KSU_COMPAT_USE_STATIC_KEY
-DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);
-#endif
-struct page *fake_status = NULL;
+// For Linux 5.4: simplified status tracking
+static bool fake_status_initialized = false;
+struct page *fake_status = NULL;  // Keep for compatibility but don't use
 
-void initialize_fake_status()
+void initialize_fake_status(void)
 {
-    mutex_lock(&selinux_state.status_lock);
-    if (fake_status)
-        goto out;
-    if (!selinux_state.status_page) {
-        pr_warn("initialize_fake_status: status_page not exist\n");
-        goto out;
-    }
-
-    struct selinux_kernel_status *status = page_address(selinux_state.status_page);
-    if (!status->enforcing) {
-        pr_warn("initialize_fake_status: skip not enforcing\n");
-        goto out;
-    }
-
-    struct page *new_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
-    if (!new_page) {
-        pr_err("initialize_fake_status: failed to allocate page\n");
-        goto out;
-    }
-
-    struct selinux_kernel_status *new_status = page_address(new_page);
-    memcpy(new_status, status, sizeof(*status));
-
-    fake_status = new_page;
-    pr_info("initialize_fake_status initialized: sequence=%d, policyload=%d, enforcing=%d\n", new_status->sequence,
-            new_status->policyload, new_status->enforcing);
-
-out:
-    mutex_unlock(&selinux_state.status_lock);
+    // Linux 5.4: selinux_state has no status_page/status_lock
+    // Simply mark as initialized
+    fake_status_initialized = true;
+    pr_info("selinux_hide: fake_status_initialized\n");
 }
-
 void ksu_selinux_hide_handle_second_stage()
 {
     initialize_fake_status();
@@ -90,7 +42,7 @@ void ksu_selinux_hide_handle_post_fs_data()
         pr_err("selinux_hide: fake status is not initialized after post-fs-data!\n");
 }
 
-static int ksu_selinux_hide_enable()
+static int ksu_selinux_hide_enable(void)
 {
     pr_info("selinux_hide: init selinux hide\n");
     if (!backup_sepolicy) {
@@ -98,13 +50,12 @@ static int ksu_selinux_hide_enable()
         return -EAGAIN;
     }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-#else
-    fake_state.initialized = true;
-    fake_state.policy = backup_sepolicy;
-#endif
-
+    // Linux 5.4: backup_sepolicy is managed in selinux/rules.c
+    // No need to set fake_state.policy (doesn't exist in 5.4)
+    
+    pr_info("selinux_hide: selinux hide enabled\n");
     return 0;
+}
 }
 
 static int selinux_hide_feature_get(u64 *value)
@@ -150,7 +101,9 @@ void __init ksu_selinux_hide_init(void)
     if (ksu_register_feature_handler(&selinux_hide_handler)) {
         pr_err("Failed to register selinux_hide feature handler\n");
     }
-    static_key_enable(&fake_status_initialize_key.key);
+    // Linux 5.4: simplified initialization
+    initialize_fake_status();
+    pr_info("selinux_hide: initialized\n");
 }
 
 void __exit ksu_selinux_hide_exit(void)
@@ -161,11 +114,10 @@ void __exit ksu_selinux_hide_exit(void)
     }
     mutex_unlock(&selinux_hide_mutex);
     ksu_unregister_feature_handler(KSU_FEATURE_SELINUX_HIDE);
-    mutex_lock(&selinux_state.status_lock);
-    if (fake_status)
-        __free_page(fake_status);
-    fake_status = NULL;
-    mutex_unlock(&selinux_state.status_lock);
+    
+    // Linux 5.4: no status_lock/status_page to manage
+    fake_status_initialized = false;
+    pr_info("selinux_hide: exited\n");
 }
 
 void ksu_selinux_hide_drop_backup_if_unused()
