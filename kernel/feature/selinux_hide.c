@@ -64,7 +64,7 @@ static int ksu_selinux_hide_enable(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 #else
     fake_state.initialized = true;
-    fake_state.policy = backup_sepolicy;
+    // fake_state.policy = backup_sepolicy;
 #endif
     return 0;
 }
