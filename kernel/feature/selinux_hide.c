@@ -55,12 +55,21 @@ void ksu_selinux_hide_handle_post_fs_data()
 static int ksu_selinux_hide_enable(void)
 {
     pr_info("selinux_hide: init selinux hide\n");
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
+    /* struct selinux_ss 在这个内核分支上是私有不透明类型(真实定义在
+     * security/selinux/ss/services.h,驱动代码看不到),fake_state.ss
+     * 没法在这里安全构造出来。直接拒绝启用,而不是带着一个没初始化
+     * 完整的 fake_state 继续跑下去。*/
+    pr_err("selinux_hide: not supported on kernel < 5.10, refusing to enable\n");
+    return -EOPNOTSUPP;
+#endif
+
     if (!backup_sepolicy) {
         pr_err("no backup sepolicy available, please save feature and reboot to retry!\n");
         return -EAGAIN;
     }
 
-    
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 #else
     fake_state.initialized = true;
